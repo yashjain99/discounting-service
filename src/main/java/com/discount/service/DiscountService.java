@@ -9,7 +9,6 @@ import com.discount.model.PaymentInfo;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Service interface for calculating and validating e-commerce discounts.
@@ -26,13 +25,15 @@ public interface DiscountService {
      * @param cartItems   List of items in the cart
      * @param customer    Customer profile information
      * @param paymentInfo Optional payment information
+     * @param voucherCode Optional voucher code information
      * @return Calculated discounted price details
      * @throws DiscountCalculationException if calculation fails
      */
     DiscountedPrice calculateCartDiscounts(
             List<CartItem> cartItems,
             CustomerProfile customer,
-            Optional<PaymentInfo> paymentInfo
+            PaymentInfo paymentInfo,
+            String voucherCode
     ) throws DiscountCalculationException;
 
     /**

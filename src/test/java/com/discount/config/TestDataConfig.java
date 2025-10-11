@@ -11,9 +11,19 @@ import org.springframework.context.annotation.Configuration;
 import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * Spring configuration class for creating test data beans.
+ * Provides pre-configured TestData instances for testing discount scenarios.
+ */
 @Configuration
 public class TestDataConfig {
 
+    /**
+     * Creates a TestData bean representing a sample cart scenario.
+     * Includes a PUMA T-shirt, a GOLD-tier customer, ICICI card payment, and a sample voucher code.
+     *
+     * @return a TestData object with pre-configured cart items, customer, payment info, and voucher code
+     */
     @Bean
     public TestData testData() {
         // PUMA T-shirt with multiple discounts scenario
@@ -23,7 +33,6 @@ public class TestDataConfig {
                 .brandTier(BrandTier.PREMIUM)
                 .category("T-Shirts")
                 .basePrice(BigDecimal.valueOf(1000))
-                .currentPrice(BigDecimal.valueOf(1000))
                 .build();
 
         CartItem cartItem = CartItem.builder()
@@ -47,6 +56,7 @@ public class TestDataConfig {
                 .cartItems(List.of(cartItem))
                 .customer(customer)
                 .paymentInfo(paymentInfo)
+                .voucherCode("SUPER69")
                 .build();
     }
 }

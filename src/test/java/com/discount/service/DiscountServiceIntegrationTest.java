@@ -9,13 +9,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Integration tests for {@link DiscountService}
+ *
+ * Tests the complete discount calculation flow, including brand, category, bank offers, and vouchers.
+ * Uses pre-configured test data provided by {@link TestDataConfig}.
+ */
 @SpringBootTest
 @Import(TestDataConfig.class)
 class DiscountServiceIntegrationTest {
@@ -26,6 +31,11 @@ class DiscountServiceIntegrationTest {
     @Autowired
     private TestData testData;
 
+    /**
+     * Tests the complete discount calculation flow for a PUMA T-shirt scenario.
+     * Verifies that all types of discounts (brand, category, bank, voucher) are applied correctly
+     * and the final price matches expected calculations.
+     */
     @Test
     void testCompleteDiscountFlow_PumaTshirtScenario() {
         // Arrange - Using test data from config
@@ -34,7 +44,8 @@ class DiscountServiceIntegrationTest {
         DiscountedPrice result = discountService.calculateCartDiscounts(
                 testData.getCartItems(),
                 testData.getCustomer(),
-                Optional.of(testData.getPaymentInfo())
+                testData.getPaymentInfo(),
+                testData.getVoucherCode()
         );
 
         // Assert
@@ -44,30 +55,60 @@ class DiscountServiceIntegrationTest {
         assertTrue(result.getAppliedDiscounts().containsKey("Brand Discount"));
         assertTrue(result.getAppliedDiscounts().containsKey("Category Discount"));
         assertTrue(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+        assertTrue(result.getAppliedDiscounts().containsKey("Voucher - SUPER69"));
 
-        // Expected: 1000 -> 600 (40% off) -> 540 (10% off) -> 486 (10% off)
-        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(486.00)));
+        // Expected: 1000 -> 600 (40% off) -> 540 (10% off) -> 486 (10% off) -> 150.66 (69% off)
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(150.66)));
 
         // Verify discount message is generated
         assertNotNull(result.getMessage());
         assertTrue(result.getMessage().contains("Brand Discount"));
     }
 
+    /**
+     * Tests discount calculation when bank offer is not provided.
+     * Verifies that the bank discount is not applied and final price is adjusted correctly.
+     */
     @Test
     void testDiscountCalculation_WithoutBankOffer() {
         // Act
         DiscountedPrice result = discountService.calculateCartDiscounts(
                 testData.getCartItems(),
                 testData.getCustomer(),
-                Optional.empty()
+                null,
+                testData.getVoucherCode()
+        );
+
+        // Assert
+        // Expected: 1000 -> 600 (40% off) -> 540 (10% off) -> 167 (69% off)
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(167.40)));
+        assertFalse(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+    }
+
+    /**
+     * Tests discount calculation when voucher code is not provided.
+     * Verifies that the voucher discount is not applied and final price is adjusted correctly.
+     */
+    @Test
+    void testDiscountCalculation_WithoutVoucherCode() {
+        // Act
+        DiscountedPrice result = discountService.calculateCartDiscounts(
+                testData.getCartItems(),
+                testData.getCustomer(),
+                testData.getPaymentInfo(),
+                null
         );
 
         // Assert
         // Expected: 1000 -> 600 (40% off) -> 540 (10% off)
-        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(540.00)));
-        assertFalse(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(486.00)));
+        assertFalse(result.getAppliedDiscounts().containsKey("Voucher - SUPER69"));
     }
 
+    /**
+     * Tests validation of a brand-specific discount code.
+     * Verifies that the discount code is correctly identified as valid.
+     */
     @Test
     void testValidateDiscountCode_BrandDiscount() {
         // Act
@@ -81,6 +122,10 @@ class DiscountServiceIntegrationTest {
         assertTrue(isValid);
     }
 
+    /**
+     * Tests validation of a category-specific discount code.
+     * Verifies that the discount code is correctly identified as valid.
+     */
     @Test
     void testValidateDiscountCode_CategoryDiscount() {
         // Act

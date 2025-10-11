@@ -10,6 +10,7 @@ import com.discount.model.PaymentInfo;
 import com.discount.model.Product;
 import com.discount.repository.DiscountRepository;
 import com.discount.service.DiscountService;
+import com.discount.utils.ValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Service implementation for handling discount-related operations.
+ * Provides methods to calculate cart discounts and validate discount codes.
+ * Uses an underlying DiscountRepository to retrieve discount data for brands, categories, vouchers, and bank offers.
+ * Tracks and applies multiple types of discounts to calculate final prices.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -32,11 +39,12 @@ public class DiscountServiceImpl implements DiscountService {
     public DiscountedPrice calculateCartDiscounts(
             List<CartItem> cartItems,
             CustomerProfile customer,
-            Optional<PaymentInfo> paymentInfo
+            PaymentInfo paymentInfo,
+            String voucherCode
     ) throws DiscountCalculationException {
 
         try {
-            validateInputs(cartItems, customer);
+            new ValidationUtils().validateInputs(cartItems, customer);
 
             BigDecimal originalPrice = calculateOriginalPrice(cartItems);
             Map<String, BigDecimal> appliedDiscounts = new LinkedHashMap<>();
@@ -46,9 +54,9 @@ public class DiscountServiceImpl implements DiscountService {
                     cartItems, appliedDiscounts
             );
 
-            // Step 2: Apply voucher codes (if any stored in session/context)
+            // Step 2: Apply voucher codes
             BigDecimal priceAfterVoucher = applyVoucherDiscounts(
-                    cartItems, customer, priceAfterBrandCategory, appliedDiscounts
+                    voucherCode, cartItems, customer, priceAfterBrandCategory, appliedDiscounts
             );
 
             // Step 3: Apply bank offers
@@ -79,7 +87,6 @@ public class DiscountServiceImpl implements DiscountService {
             List<CartItem> cartItems,
             CustomerProfile customer
     ) throws DiscountValidationException {
-
         try {
             Discount discount = discountRepository.findByCode(code)
                     .orElseThrow(() -> new DiscountValidationException(
@@ -96,10 +103,8 @@ public class DiscountServiceImpl implements DiscountService {
             }
 
             // Check if any cart item matches discount criteria
-            boolean hasApplicableItem = cartItems.stream()
-                    .anyMatch(item -> isDiscountApplicable(discount, item));
-
-            return hasApplicableItem;
+            return cartItems.stream()
+                    .anyMatch(item -> new ValidationUtils().isDiscountApplicable(discount, item));
 
         } catch (DiscountValidationException e) {
             throw e;
@@ -111,15 +116,12 @@ public class DiscountServiceImpl implements DiscountService {
         }
     }
 
-    private void validateInputs(List<CartItem> cartItems, CustomerProfile customer) {
-        if (cartItems == null || cartItems.isEmpty()) {
-            throw new DiscountCalculationException("Cart items cannot be empty");
-        }
-        if (customer == null) {
-            throw new DiscountCalculationException("Customer profile is required");
-        }
-    }
-
+    /**
+     * Calculates the total original price of all items in the cart before any discounts.
+     *
+     * @param cartItems the list of cart items to calculate the total price for
+     * @return the total original price as a BigDecimal
+     */
     private BigDecimal calculateOriginalPrice(List<CartItem> cartItems) {
         return cartItems.stream()
                 .map(item -> item.getProduct().getBasePrice()
@@ -127,6 +129,14 @@ public class DiscountServiceImpl implements DiscountService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    /**
+     * Applies brand and category discounts to a list of cart items and calculates the total price after discounts.
+     * Tracks the total brand and category discounts applied in the provided map.
+     *
+     * @param cartItems        the list of cart items to apply discounts to
+     * @param appliedDiscounts a map to track the total discounts applied, keyed by discount type
+     * @return the total price of the cart items after applying brand and category discounts
+     */
     private BigDecimal applyBrandAndCategoryDiscounts(
             List<CartItem> cartItems,
             Map<String, BigDecimal> appliedDiscounts
@@ -137,72 +147,160 @@ public class DiscountServiceImpl implements DiscountService {
 
         for (CartItem item : cartItems) {
             Product product = item.getProduct();
-            BigDecimal itemPrice = product.getBasePrice();
+            int quantity = item.getQuantity();
+
+            // Start with base price
+            BigDecimal currentPrice = product.getBasePrice();
+
+            Discount brandDiscount = discountRepository.findBrandDiscount(product.getBrand()).isPresent()
+                    ? discountRepository.findBrandDiscount(product.getBrand()).get()
+                    : null;
 
             // Apply brand discount
-            Optional<Discount> brandDiscount = discountRepository
-                    .findBrandDiscount(product.getBrand());
-            if (brandDiscount.isPresent()) {
-                BigDecimal discount = calculateDiscount(
-                        itemPrice, brandDiscount.get()
-                );
-                itemPrice = itemPrice.subtract(discount);
-                totalBrandDiscount = totalBrandDiscount.add(
-                        discount.multiply(BigDecimal.valueOf(item.getQuantity()))
-                );
-            }
+            DiscountCalculationResult brandResult = applyDiscountIfPresent(
+                    currentPrice,
+                    brandDiscount
+            );
+            currentPrice = brandResult.discountedPrice();
+            totalBrandDiscount = totalBrandDiscount.add(
+                    brandResult.discountAmount().multiply(BigDecimal.valueOf(quantity))
+            );
+
+            Discount categoryDiscount = discountRepository.findCategoryDiscount(product.getCategory()).isPresent()
+                    ? discountRepository.findCategoryDiscount(product.getCategory()).get()
+                    : null;
 
             // Apply category discount
-            Optional<Discount> categoryDiscount = discountRepository
-                    .findCategoryDiscount(product.getCategory());
-            if (categoryDiscount.isPresent()) {
-                BigDecimal discount = calculateDiscount(
-                        itemPrice, categoryDiscount.get()
-                );
-                itemPrice = itemPrice.subtract(discount);
-                totalCategoryDiscount = totalCategoryDiscount.add(
-                        discount.multiply(BigDecimal.valueOf(item.getQuantity()))
-                );
-            }
+            DiscountCalculationResult categoryResult = applyDiscountIfPresent(
+                    currentPrice,
+                    categoryDiscount
+            );
+            currentPrice = categoryResult.discountedPrice();
+            totalCategoryDiscount = totalCategoryDiscount.add(
+                    categoryResult.discountAmount().multiply(BigDecimal.valueOf(quantity))
+            );
 
-            // Update product current price
-            product.setCurrentPrice(itemPrice);
+            // Add to total
             totalPrice = totalPrice.add(
-                    itemPrice.multiply(BigDecimal.valueOf(item.getQuantity()))
+                    currentPrice.multiply(BigDecimal.valueOf(quantity))
             );
         }
 
-        if (totalBrandDiscount.compareTo(BigDecimal.ZERO) > 0) {
-            appliedDiscounts.put("Brand Discount", totalBrandDiscount);
-        }
-        if (totalCategoryDiscount.compareTo(BigDecimal.ZERO) > 0) {
-            appliedDiscounts.put("Category Discount", totalCategoryDiscount);
-        }
+        // Track applied discounts
+        addDiscountIfNonZero(appliedDiscounts, "Brand Discount", totalBrandDiscount);
+        addDiscountIfNonZero(appliedDiscounts, "Category Discount", totalCategoryDiscount);
 
         return totalPrice;
     }
 
+    /**
+     * Add discount to map only if amount is greater than zero
+     */
+    private void addDiscountIfNonZero(
+            Map<String, BigDecimal> discounts,
+            String name,
+            BigDecimal amount
+    ) {
+        if (amount.compareTo(BigDecimal.ZERO) > 0) {
+            discounts.put(name, amount);
+        }
+    }
+
+    /**
+     * Applies a discount to the given price if the discount is present.
+     * If the discount is null, returns the original price with zero discount.
+     *
+     * @param currentPrice the current price to apply the discount to
+     * @param discount     the discount to apply, may be null
+     * @return a DiscountCalculationResult containing the new price after discount and the discount amount applied
+     */
+    private DiscountCalculationResult applyDiscountIfPresent(
+            BigDecimal currentPrice,
+            Discount discount
+    ) {
+
+        // Handle nullable paymentInfo
+        Optional<Discount> optionalDiscount = Optional.ofNullable(discount);
+
+        if (optionalDiscount.isEmpty()) {
+            return new DiscountCalculationResult(currentPrice, BigDecimal.ZERO);
+        }
+
+        BigDecimal discountAmount = calculateDiscount(currentPrice, optionalDiscount.get());
+        BigDecimal newPrice = currentPrice.subtract(discountAmount);
+
+        return new DiscountCalculationResult(newPrice, discountAmount);
+    }
+
+    /**
+     * Apply voucher discount if code is provided and valid
+     */
     private BigDecimal applyVoucherDiscounts(
+            String code,
             List<CartItem> cartItems,
             CustomerProfile customer,
             BigDecimal currentPrice,
             Map<String, BigDecimal> appliedDiscounts
     ) {
-        // For this implementation, vouchers would be passed separately
-        // This is a placeholder for voucher logic
-        return currentPrice;
-    }
-
-    private BigDecimal applyBankOffers(
-            Optional<PaymentInfo> paymentInfo,
-            BigDecimal currentPrice,
-            Map<String, BigDecimal> appliedDiscounts
-    ) {
-        if (paymentInfo.isEmpty() || paymentInfo.get().getBankName() == null) {
+        if (code == null || code.isBlank()) {
             return currentPrice;
         }
 
-        PaymentInfo payment = paymentInfo.get();
+        // Validate the voucher code
+        if (!validateDiscountCode(code, cartItems, customer)) {
+            log.warn("Invalid voucher code: {}", code);
+            throw new DiscountValidationException("Invalid or inapplicable voucher code: " + code);
+        }
+
+        // Get voucher discount details
+        Optional<Discount> voucher = discountRepository.findByCode(code);
+        if (voucher.isEmpty()) {
+            return currentPrice;
+        }
+
+        Discount voucherDiscount = voucher.get();
+
+        // Check if voucher is applicable to cart items
+        boolean applicable = cartItems.stream()
+                .anyMatch(item -> new ValidationUtils().isDiscountApplicable(voucherDiscount, item));
+
+        if (!applicable) {
+            throw new DiscountValidationException(
+                    "Voucher code '" + code + "' is not applicable to items in cart"
+            );
+        }
+
+        // Calculate voucher discount
+        BigDecimal discountAmount = calculateDiscount(currentPrice, voucherDiscount);
+        appliedDiscounts.put("Voucher - " + code, discountAmount);
+
+        return currentPrice.subtract(discountAmount);
+    }
+
+    /**
+     * Applies a bank-specific offer to the current price if the payment information and offer are available.
+     * Tracks the applied bank discount in the provided map.
+     *
+     * @param paymentInfo      the payment information containing bank and card details, may be null
+     * @param currentPrice     the current price before applying the bank offer
+     * @param appliedDiscounts a map to track the total discounts applied, keyed by discount type
+     * @return the price after applying the bank offer, or the original price if no offer is applicable
+     */
+    private BigDecimal applyBankOffers(
+            // Removed Optional as a parameter: it can cause issues with Jackson, JPA and it is discouraged.
+            PaymentInfo paymentInfo,
+            BigDecimal currentPrice,
+            Map<String, BigDecimal> appliedDiscounts
+    ) {
+
+        // Handle nullable paymentInfo
+        Optional<PaymentInfo> optionalPayment = Optional.ofNullable(paymentInfo);
+
+        if (optionalPayment.isEmpty() || optionalPayment.get().getBankName() == null) {
+            return currentPrice;
+        }
+
+        PaymentInfo payment = optionalPayment.get();
         Optional<Discount> bankOffer = discountRepository
                 .findBankOffer(payment.getBankName(), payment.getCardType());
 
@@ -215,6 +313,13 @@ public class DiscountServiceImpl implements DiscountService {
         return currentPrice;
     }
 
+    /**
+     * Calculates the discount amount for a given price based on the discount details.
+     *
+     * @param price    the original price to calculate the discount on
+     * @param discount the discount to apply
+     * @return the discount amount as a BigDecimal
+     */
     private BigDecimal calculateDiscount(BigDecimal price, Discount discount) {
         if (discount.isPercentage()) {
             return price.multiply(discount.getValue())
@@ -223,38 +328,12 @@ public class DiscountServiceImpl implements DiscountService {
         return discount.getValue();
     }
 
-    private boolean isDiscountApplicable(Discount discount, CartItem item) {
-        Product product = item.getProduct();
-
-        // Check brand exclusions
-        if (discount.getExcludedBrands() != null
-            && discount.getExcludedBrands().contains(product.getBrand())) {
-            return false;
-        }
-
-        // Check category exclusions
-        if (discount.getExcludedCategories() != null
-            && discount.getExcludedCategories()
-                    .contains(product.getCategory())) {
-            return false;
-        }
-
-        // Check applicable brands
-        if (discount.getApplicableBrands() != null
-            && !discount.getApplicableBrands().isEmpty()) {
-            return discount.getApplicableBrands().contains(product.getBrand());
-        }
-
-        // Check applicable categories
-        if (discount.getApplicableCategories() != null
-            && !discount.getApplicableCategories().isEmpty()) {
-            return discount.getApplicableCategories()
-                    .contains(product.getCategory());
-        }
-
-        return true;
-    }
-
+    /**
+     * Builds a descriptive message summarizing the discounts applied to a cart.
+     *
+     * @param appliedDiscounts a map of discount types and their corresponding amounts
+     * @return a formatted string describing the applied discounts, or a message indicating no discounts were applied
+     */
     private String buildDiscountMessage(Map<String, BigDecimal> appliedDiscounts) {
         if (appliedDiscounts.isEmpty()) {
             return "No discounts applied";
@@ -268,5 +347,14 @@ public class DiscountServiceImpl implements DiscountService {
         );
 
         return message.substring(0, message.length() - 2);
+    }
+
+    /**
+     * Internal record to hold discount calculation results
+     */
+    private record DiscountCalculationResult(
+            BigDecimal discountedPrice,
+            BigDecimal discountAmount
+    ) {
     }
 }

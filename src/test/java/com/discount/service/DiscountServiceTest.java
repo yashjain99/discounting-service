@@ -30,6 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
+/**
+ * Unit tests for {@link DiscountServiceImpl} using Mockito
+ *
+ * Tests individual discount calculation and validation logic in isolation,
+ * mocking the {@link DiscountRepository} to simulate different discount scenarios.
+ */
 @ExtendWith(MockitoExtension.class)
 class DiscountServiceTest {
 
@@ -38,11 +44,18 @@ class DiscountServiceTest {
 
     private DiscountService discountService;
 
+    /**
+     * Initializes the DiscountServiceImpl with mocked repository before each test.
+     */
     @BeforeEach
     void setUp() {
         discountService = new DiscountServiceImpl(discountRepository);
     }
 
+    /**
+     * Tests calculation of cart discounts when all types of discounts are applicable.
+     * Verifies that final price is reduced and applied discounts are tracked.
+     */
     @Test
     void testCalculateCartDiscounts_WithAllDiscounts() {
         // Arrange
@@ -70,7 +83,8 @@ class DiscountServiceTest {
         DiscountedPrice result = discountService.calculateCartDiscounts(
                 List.of(cartItem),
                 customer,
-                Optional.of(paymentInfo)
+                paymentInfo,
+                "SUPER69"
         );
 
         // Assert
@@ -81,6 +95,9 @@ class DiscountServiceTest {
         assertFalse(result.getAppliedDiscounts().isEmpty());
     }
 
+    /**
+     * Tests validation of a discount code that is expected to be valid.
+     */
     @Test
     void testValidateDiscountCode_ValidCode() {
         // Arrange
@@ -120,6 +137,9 @@ class DiscountServiceTest {
         assertTrue(result);
     }
 
+    /**
+     * Tests that calculating discounts on an empty cart throws {@link DiscountCalculationException}.
+     */
     @Test
     void testCalculateCartDiscounts_EmptyCart_ThrowsException() {
         // Arrange
@@ -133,11 +153,17 @@ class DiscountServiceTest {
                 discountService.calculateCartDiscounts(
                         Collections.emptyList(),
                         customer,
-                        Optional.empty()
+                        null,
+                        null
                 )
         );
     }
 
+    /**
+     * Helper method to create a sample test product for discount scenarios.
+     *
+     * @return a sample Product object
+     */
     private Product createTestProduct() {
         return Product.builder()
                 .id("PROD_001")
@@ -145,10 +171,12 @@ class DiscountServiceTest {
                 .brandTier(BrandTier.PREMIUM)
                 .category("T-Shirts")
                 .basePrice(BigDecimal.valueOf(1000))
-                .currentPrice(BigDecimal.valueOf(1000))
                 .build();
     }
 
+    /**
+     * Sets up mock discount responses from the repository to simulate different discount scenarios.
+     */
     private void setupMockDiscounts() {
         Discount brandDiscount = Discount.builder()
                 .id("BRAND_PUMA")
@@ -171,11 +199,21 @@ class DiscountServiceTest {
                 .isPercentage(true)
                 .build();
 
+        Discount voucherDiscount = Discount.builder()
+                .id("VOUCHER_SUPER69")
+                .code("SUPER69")
+                .type(DiscountType.VOUCHER)
+                .value(BigDecimal.valueOf(69))
+                .isPercentage(true)
+                .build();
+
         when(discountRepository.findBrandDiscount("PUMA"))
                 .thenReturn(Optional.of(brandDiscount));
         when(discountRepository.findCategoryDiscount("T-Shirts"))
                 .thenReturn(Optional.of(categoryDiscount));
         when(discountRepository.findBankOffer("ICICI", "CREDIT"))
                 .thenReturn(Optional.of(bankOffer));
+        when(discountRepository.findByCode("SUPER69"))
+                .thenReturn((Optional.of(voucherDiscount)));
     }
 }

@@ -14,5 +14,4 @@ public class Product {
     private BrandTier brandTier;
     private String category;
     private BigDecimal basePrice;
-    private BigDecimal currentPrice;
 }
