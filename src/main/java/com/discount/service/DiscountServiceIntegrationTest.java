@@ -1,0 +1,89 @@
+package com.discount.service;
+
+import com.discount.config.TestData;
+import com.discount.config.TestDataConfig;
+import com.discount.model.DiscountedPrice;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+
+import java.math.BigDecimal;
+import java.util.Optional;
+
+@SpringBootTest
+@Import(TestDataConfig.class)
+class DiscountServiceIntegrationTest {
+
+    @Autowired
+    private DiscountService discountService;
+
+    @Autowired
+    private TestData testData;
+
+    @Test
+    void testCompleteDiscountFlow_PumaTshirtScenario() {
+        // Arrange - Using test data from config
+
+        // Act
+        DiscountedPrice result = discountService.calculateCartDiscounts(
+                testData.getCartItems(),
+                testData.getCustomer(),
+                Optional.of(testData.getPaymentInfo())
+        );
+
+        // Assert
+        assertEquals(BigDecimal.valueOf(1000), result.getOriginalPrice());
+
+        // Verify all three discounts are applied
+        assertTrue(result.getAppliedDiscounts().containsKey("Brand Discount"));
+        assertTrue(result.getAppliedDiscounts().containsKey("Category Discount"));
+        assertTrue(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+
+        // Expected: 1000 -> 600 (40% off) -> 540 (10% off) -> 486 (10% off)
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(486.00)));
+
+        // Verify discount message is generated
+        assertNotNull(result.getMessage());
+        assertTrue(result.getMessage().contains("Brand Discount"));
+    }
+
+    @Test
+    void testDiscountCalculation_WithoutBankOffer() {
+        // Act
+        DiscountedPrice result = discountService.calculateCartDiscounts(
+                testData.getCartItems(),
+                testData.getCustomer(),
+                Optional.empty()
+        );
+
+        // Assert
+        // Expected: 1000 -> 600 (40% off) -> 540 (10% off)
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(540.00)));
+        assertFalse(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+    }
+
+    @Test
+    void testValidateDiscountCode_BrandDiscount() {
+        // Act
+        boolean isValid = discountService.validateDiscountCode(
+                "PUMA40",
+                testData.getCartItems(),
+                testData.getCustomer()
+        );
+
+        // Assert
+        assertTrue(isValid);
+    }
+
+    @Test
+    void testValidateDiscountCode_CategoryDiscount() {
+        // Act
+        boolean isValid = discountService.validateDiscountCode(
+                "TSHIRT10",
+                testData.getCartItems(),
+                testData.getCustomer()
+        );
+
+        // Assert
+        assertTrue(isValid);
+    }
+}
