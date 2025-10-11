@@ -10,6 +10,7 @@ import com.discount.model.PaymentInfo;
 import com.discount.model.Product;
 import com.discount.repository.DiscountRepository;
 import com.discount.service.DiscountService;
+import com.discount.utils.ValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,7 @@ public class DiscountServiceImpl implements DiscountService {
     ) throws DiscountCalculationException {
 
         try {
-            validateInputs(cartItems, customer);
+            new ValidationUtils().validateInputs(cartItems, customer);
 
             BigDecimal originalPrice = calculateOriginalPrice(cartItems);
             Map<String, BigDecimal> appliedDiscounts = new LinkedHashMap<>();
@@ -46,7 +47,7 @@ public class DiscountServiceImpl implements DiscountService {
                     cartItems, appliedDiscounts
             );
 
-            // Step 2: Apply voucher codes (if any stored in session/context)
+            // Step 2: Apply voucher codes
             BigDecimal priceAfterVoucher = applyVoucherDiscounts(
                     cartItems, customer, priceAfterBrandCategory, appliedDiscounts
             );
@@ -97,7 +98,7 @@ public class DiscountServiceImpl implements DiscountService {
 
             // Check if any cart item matches discount criteria
             return cartItems.stream()
-                    .anyMatch(item -> isDiscountApplicable(discount, item));
+                    .anyMatch(item -> new ValidationUtils().isDiscountApplicable(discount, item));
 
         } catch (DiscountValidationException e) {
             throw e;
@@ -106,15 +107,6 @@ public class DiscountServiceImpl implements DiscountService {
             throw new DiscountValidationException(
                     "Failed to validate discount code: " + e.getMessage(), e
             );
-        }
-    }
-
-    private void validateInputs(List<CartItem> cartItems, CustomerProfile customer) {
-        if (cartItems == null || cartItems.isEmpty()) {
-            throw new DiscountValidationException("Cart items cannot be empty");
-        }
-        if (customer == null) {
-            throw new DiscountValidationException("Customer profile is required");
         }
     }
 
@@ -135,49 +127,81 @@ public class DiscountServiceImpl implements DiscountService {
 
         for (CartItem item : cartItems) {
             Product product = item.getProduct();
-            BigDecimal itemPrice = product.getBasePrice();
+            int quantity = item.getQuantity();
+
+            // Start with base price
+            BigDecimal currentPrice = product.getBasePrice();
+
+            Discount brandDiscount = discountRepository.findBrandDiscount(product.getBrand()).isPresent()
+                    ? discountRepository.findBrandDiscount(product.getBrand()).get()
+                    : null;
 
             // Apply brand discount
-            Optional<Discount> brandDiscount = discountRepository
-                    .findBrandDiscount(product.getBrand());
-            if (brandDiscount.isPresent()) {
-                BigDecimal discount = calculateDiscount(
-                        itemPrice, brandDiscount.get()
-                );
-                itemPrice = itemPrice.subtract(discount);
-                totalBrandDiscount = totalBrandDiscount.add(
-                        discount.multiply(BigDecimal.valueOf(item.getQuantity()))
-                );
-            }
+            DiscountCalculationResult brandResult = applyDiscountIfPresent(
+                    currentPrice,
+                    brandDiscount
+            );
+            currentPrice = brandResult.discountedPrice();
+            totalBrandDiscount = totalBrandDiscount.add(
+                    brandResult.discountAmount().multiply(BigDecimal.valueOf(quantity))
+            );
+
+            Discount categoryDiscount = discountRepository.findCategoryDiscount(product.getCategory()).isPresent()
+                    ? discountRepository.findCategoryDiscount(product.getCategory()).get()
+                    : null;
 
             // Apply category discount
-            Optional<Discount> categoryDiscount = discountRepository
-                    .findCategoryDiscount(product.getCategory());
-            if (categoryDiscount.isPresent()) {
-                BigDecimal discount = calculateDiscount(
-                        itemPrice, categoryDiscount.get()
-                );
-                itemPrice = itemPrice.subtract(discount);
-                totalCategoryDiscount = totalCategoryDiscount.add(
-                        discount.multiply(BigDecimal.valueOf(item.getQuantity()))
-                );
-            }
+            DiscountCalculationResult categoryResult = applyDiscountIfPresent(
+                    currentPrice,
+                    categoryDiscount
+            );
+            currentPrice = categoryResult.discountedPrice();
+            totalCategoryDiscount = totalCategoryDiscount.add(
+                    categoryResult.discountAmount().multiply(BigDecimal.valueOf(quantity))
+            );
 
-            // Update product current price
-            product.setCurrentPrice(itemPrice);
+            // Add to total
             totalPrice = totalPrice.add(
-                    itemPrice.multiply(BigDecimal.valueOf(item.getQuantity()))
+                    currentPrice.multiply(BigDecimal.valueOf(quantity))
             );
         }
 
-        if (totalBrandDiscount.compareTo(BigDecimal.ZERO) > 0) {
-            appliedDiscounts.put("Brand Discount", totalBrandDiscount);
-        }
-        if (totalCategoryDiscount.compareTo(BigDecimal.ZERO) > 0) {
-            appliedDiscounts.put("Category Discount", totalCategoryDiscount);
-        }
+        // Track applied discounts
+        addDiscountIfNonZero(appliedDiscounts, "Brand Discount", totalBrandDiscount);
+        addDiscountIfNonZero(appliedDiscounts, "Category Discount", totalCategoryDiscount);
 
         return totalPrice;
+    }
+
+    /**
+     * Add discount to map only if amount is greater than zero
+     */
+    private void addDiscountIfNonZero(
+            Map<String, BigDecimal> discounts,
+            String name,
+            BigDecimal amount
+    ) {
+        if (amount.compareTo(BigDecimal.ZERO) > 0) {
+            discounts.put(name, amount);
+        }
+    }
+
+    private DiscountCalculationResult applyDiscountIfPresent(
+            BigDecimal currentPrice,
+            Discount discount
+    ) {
+
+        // Handle nullable paymentInfo
+        Optional<Discount> optionalDiscount = Optional.ofNullable(discount);
+
+        if (optionalDiscount.isEmpty()) {
+            return new DiscountCalculationResult(currentPrice, BigDecimal.ZERO);
+        }
+
+        BigDecimal discountAmount = calculateDiscount(currentPrice, optionalDiscount.get());
+        BigDecimal newPrice = currentPrice.subtract(discountAmount);
+
+        return new DiscountCalculationResult(newPrice, discountAmount);
     }
 
     private BigDecimal applyVoucherDiscounts(
@@ -226,38 +250,6 @@ public class DiscountServiceImpl implements DiscountService {
         return discount.getValue();
     }
 
-    private boolean isDiscountApplicable(Discount discount, CartItem item) {
-        Product product = item.getProduct();
-
-        // Check brand exclusions
-        if (discount.getExcludedBrands() != null
-            && discount.getExcludedBrands().contains(product.getBrand())) {
-            return false;
-        }
-
-        // Check category exclusions
-        if (discount.getExcludedCategories() != null
-            && discount.getExcludedCategories()
-                    .contains(product.getCategory())) {
-            return false;
-        }
-
-        // Check applicable brands
-        if (discount.getApplicableBrands() != null
-            && !discount.getApplicableBrands().isEmpty()) {
-            return discount.getApplicableBrands().contains(product.getBrand());
-        }
-
-        // Check applicable categories
-        if (discount.getApplicableCategories() != null
-            && !discount.getApplicableCategories().isEmpty()) {
-            return discount.getApplicableCategories()
-                    .contains(product.getCategory());
-        }
-
-        return true;
-    }
-
     private String buildDiscountMessage(Map<String, BigDecimal> appliedDiscounts) {
         if (appliedDiscounts.isEmpty()) {
             return "No discounts applied";
@@ -271,5 +263,14 @@ public class DiscountServiceImpl implements DiscountService {
         );
 
         return message.substring(0, message.length() - 2);
+    }
+
+    /**
+     * Internal record to hold discount calculation results
+     */
+    private record DiscountCalculationResult(
+            BigDecimal discountedPrice,
+            BigDecimal discountAmount
+    ) {
     }
 }

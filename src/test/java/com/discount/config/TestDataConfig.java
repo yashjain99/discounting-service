@@ -23,7 +23,6 @@ public class TestDataConfig {
                 .brandTier(BrandTier.PREMIUM)
                 .category("T-Shirts")
                 .basePrice(BigDecimal.valueOf(1000))
-                .currentPrice(BigDecimal.valueOf(1000))
                 .build();
 
         CartItem cartItem = CartItem.builder()
