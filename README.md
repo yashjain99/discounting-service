@@ -74,12 +74,81 @@ The test data includes a PUMA T-shirt (₹1000) with:
 
 ## Assumptions
 
-1. **Discount Stacking**: All applicable discounts stack multiplicatively
-2. **Brand/Category Order**: Brand discounts apply before category discounts
-3. **Voucher Codes**: Not fully implemented in initial version (placeholder exists)
-4. **Customer Tiers**: Used for validation but not for com.discount calculation
-5. **Thread Safety**: Current implementation is not thread-safe
-6. **Data Persistence**: Using in-memory storage for simplicity
+### Discount Logic
+1. **Discount Stacking**: All applicable discounts stack multiplicatively (not additively)
+    - Example: 40% + 10% = 46% total discount, not 50%
+    - Calculation: ₹1000 → ₹600 (40% off) → ₹540 (10% of ₹600), not ₹500
+
+2. **Discount Application Order**: Fixed sequence as per requirements
+    - First: Brand discounts
+    - Second: Category discounts
+    - Third: Voucher codes
+    - Fourth: Bank offers
+    - Each discount applies to the already-discounted price from previous step
+
+3. **Product-Level vs Cart-Level Discounts**:
+    - Brand and category discounts: Applied at product level (per item)
+    - Voucher codes: Applied at cart level (total after brand/category discounts)
+    - Bank offers: Applied at cart level (final total)
+
+### Voucher Codes
+1. **Voucher Code Input**: Voucher code is passed as a separate string parameter
+    - Applied at checkout time
+    - Can be null (no voucher applied)
+
+2. **Voucher Validation**: Voucher codes must be validated before application
+    - Check if code exists in repository
+    - Check brand exclusions
+    - Check category restrictions
+    - Check customer tier requirements
+
+### Payment & Bank Offers
+1. **Payment Info Optional**: Payment information is optional
+   - If not provided, no bank offers applied
+   - Bank offers require both bankName and cardType
+
+### Product & Pricing
+1. **Product Immutability**: Product objects should not be mutated during discount calculation
+   - `currentPrice` field is removed
+   - All calculations done on-the-fly without storing intermediate state
+
+2. **Price Precision**: All monetary calculations use BigDecimal
+   - Rounding mode: HALF_UP (standard rounding)
+   - Scale: 2 decimal places for final prices
+
+3. **Base Price**: Product.basePrice is the original price before any discounts
+   - Never changes during calculation
+   - Used as starting point for all discount calculations
+
+### Data & Storage
+1. **In-Memory Repository**: Test data stored in memory
+   - No database persistence
+   - Data lost on application restart
+
+### Error Handling
+1. **Exception Strategy**:
+   - `DiscountCalculationException`: For calculation errors (empty cart, null customer, etc.)
+   - `DiscountValidationException`: For invalid/inapplicable voucher codes
+   - Both are RuntimeExceptions (unchecked)
+
+2. **Validation Rules**:
+   - Empty cart throws exception
+   - Null customer throws exception
+   - Invalid voucher code throws exception during calculation
+   - Missing payment info silently skips bank offers (no exception)
+
+### Testing
+1. **Test Scenario**: Based on assignment requirements
+   - PUMA T-shirt: ₹1000 base price
+   - 40% PUMA brand discount
+   - 10% T-Shirts category discount
+   - 69% SUPER69 voucher
+   - 10% ICICI bank offer
+   - Expected final price: ₹150.66
+
+2. **Test Coverage**: Unit tests use mocks, integration tests use real beans
+   - Unit tests: Test service logic with mocked repository
+   - Integration tests: Test complete Spring Boot context with test data
 
 ## API Usage
 
