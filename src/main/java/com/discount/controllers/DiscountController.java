@@ -14,7 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST controller for discount operations
+ * REST controller for handling discount-related operations.
+ * Provides endpoints for calculating cart discounts and validating discount codes.
  */
 @Slf4j
 @RestController
@@ -22,11 +23,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class DiscountController {
 
+    /**
+     * Service for performing discount calculations and validations.
+     */
     private final DiscountService discountService;
 
     /**
-     * Calculate discounts for a cart
-     * POST /api/v1/discounts/calculate
+     * Calculates the discounted price for a list of cart items for a given customer and optional payment info or voucher code.
+     *
+     * @param request the request containing cart items, customer information, payment info, and optional voucher code
+     * @return the discounted price for the cart wrapped in a ResponseEntity
      */
     @PostMapping("/calculate")
     public ResponseEntity<DiscountedPrice> calculateDiscounts(
@@ -45,8 +51,10 @@ public class DiscountController {
     }
 
     /**
-     * Validate a discount code
-     * POST /api/v1/discounts/validate
+     * Validates whether a discount code is applicable for the given cart items and customer.
+     *
+     * @param request the request containing the discount code, cart items, and customer information
+     * @return a response indicating whether the discount code is valid and a descriptive message
      */
     @PostMapping("/validate")
     public ResponseEntity<DiscountValidationResponse> validateDiscountCode(

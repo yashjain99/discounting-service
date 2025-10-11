@@ -10,6 +10,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * In-memory implementation of DiscountRepository.
+ * Stores and retrieves discount data using internal maps for codes, brands, categories, and bank offers.
+ */
 @Repository
 public class InMemoryDiscountRepository implements DiscountRepository {
 
@@ -18,10 +22,16 @@ public class InMemoryDiscountRepository implements DiscountRepository {
     private final Map<String, Discount> categoryDiscounts = new HashMap<>();
     private final Map<String, Discount> bankOffers = new HashMap<>();
 
+    /**
+     * Initializes the repository with sample discount data.
+     */
     public InMemoryDiscountRepository() {
         initializeDiscounts();
     }
 
+    /**
+     * Populates the in-memory maps with predefined discounts for brands, categories, banks, and vouchers.
+     */
     private void initializeDiscounts() {
         // Brand discount: PUMA 40% off
         Discount pumaDiscount = Discount.builder()

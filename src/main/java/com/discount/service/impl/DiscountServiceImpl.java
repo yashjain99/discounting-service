@@ -22,6 +22,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Service implementation for handling discount-related operations.
+ * Provides methods to calculate cart discounts and validate discount codes.
+ * Uses an underlying DiscountRepository to retrieve discount data for brands, categories, vouchers, and bank offers.
+ * Tracks and applies multiple types of discounts to calculate final prices.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -110,6 +116,12 @@ public class DiscountServiceImpl implements DiscountService {
         }
     }
 
+    /**
+     * Calculates the total original price of all items in the cart before any discounts.
+     *
+     * @param cartItems the list of cart items to calculate the total price for
+     * @return the total original price as a BigDecimal
+     */
     private BigDecimal calculateOriginalPrice(List<CartItem> cartItems) {
         return cartItems.stream()
                 .map(item -> item.getProduct().getBasePrice()
@@ -117,6 +129,14 @@ public class DiscountServiceImpl implements DiscountService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    /**
+     * Applies brand and category discounts to a list of cart items and calculates the total price after discounts.
+     * Tracks the total brand and category discounts applied in the provided map.
+     *
+     * @param cartItems        the list of cart items to apply discounts to
+     * @param appliedDiscounts a map to track the total discounts applied, keyed by discount type
+     * @return the total price of the cart items after applying brand and category discounts
+     */
     private BigDecimal applyBrandAndCategoryDiscounts(
             List<CartItem> cartItems,
             Map<String, BigDecimal> appliedDiscounts
@@ -186,6 +206,14 @@ public class DiscountServiceImpl implements DiscountService {
         }
     }
 
+    /**
+     * Applies a discount to the given price if the discount is present.
+     * If the discount is null, returns the original price with zero discount.
+     *
+     * @param currentPrice the current price to apply the discount to
+     * @param discount     the discount to apply, may be null
+     * @return a DiscountCalculationResult containing the new price after discount and the discount amount applied
+     */
     private DiscountCalculationResult applyDiscountIfPresent(
             BigDecimal currentPrice,
             Discount discount
@@ -249,6 +277,15 @@ public class DiscountServiceImpl implements DiscountService {
         return currentPrice.subtract(discountAmount);
     }
 
+    /**
+     * Applies a bank-specific offer to the current price if the payment information and offer are available.
+     * Tracks the applied bank discount in the provided map.
+     *
+     * @param paymentInfo      the payment information containing bank and card details, may be null
+     * @param currentPrice     the current price before applying the bank offer
+     * @param appliedDiscounts a map to track the total discounts applied, keyed by discount type
+     * @return the price after applying the bank offer, or the original price if no offer is applicable
+     */
     private BigDecimal applyBankOffers(
             // Removed Optional as a parameter: it can cause issues with Jackson, JPA and it is discouraged.
             PaymentInfo paymentInfo,
@@ -276,6 +313,13 @@ public class DiscountServiceImpl implements DiscountService {
         return currentPrice;
     }
 
+    /**
+     * Calculates the discount amount for a given price based on the discount details.
+     *
+     * @param price    the original price to calculate the discount on
+     * @param discount the discount to apply
+     * @return the discount amount as a BigDecimal
+     */
     private BigDecimal calculateDiscount(BigDecimal price, Discount discount) {
         if (discount.isPercentage()) {
             return price.multiply(discount.getValue())
@@ -284,6 +328,12 @@ public class DiscountServiceImpl implements DiscountService {
         return discount.getValue();
     }
 
+    /**
+     * Builds a descriptive message summarizing the discounts applied to a cart.
+     *
+     * @param appliedDiscounts a map of discount types and their corresponding amounts
+     * @return a formatted string describing the applied discounts, or a message indicating no discounts were applied
+     */
     private String buildDiscountMessage(Map<String, BigDecimal> appliedDiscounts) {
         if (appliedDiscounts.isEmpty()) {
             return "No discounts applied";

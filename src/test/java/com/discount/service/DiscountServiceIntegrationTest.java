@@ -15,6 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Integration tests for {@link DiscountService}
+ *
+ * Tests the complete discount calculation flow, including brand, category, bank offers, and vouchers.
+ * Uses pre-configured test data provided by {@link TestDataConfig}.
+ */
 @SpringBootTest
 @Import(TestDataConfig.class)
 class DiscountServiceIntegrationTest {
@@ -25,6 +31,11 @@ class DiscountServiceIntegrationTest {
     @Autowired
     private TestData testData;
 
+    /**
+     * Tests the complete discount calculation flow for a PUMA T-shirt scenario.
+     * Verifies that all types of discounts (brand, category, bank, voucher) are applied correctly
+     * and the final price matches expected calculations.
+     */
     @Test
     void testCompleteDiscountFlow_PumaTshirtScenario() {
         // Arrange - Using test data from config
@@ -54,6 +65,10 @@ class DiscountServiceIntegrationTest {
         assertTrue(result.getMessage().contains("Brand Discount"));
     }
 
+    /**
+     * Tests discount calculation when bank offer is not provided.
+     * Verifies that the bank discount is not applied and final price is adjusted correctly.
+     */
     @Test
     void testDiscountCalculation_WithoutBankOffer() {
         // Act
@@ -70,6 +85,10 @@ class DiscountServiceIntegrationTest {
         assertFalse(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
     }
 
+    /**
+     * Tests discount calculation when voucher code is not provided.
+     * Verifies that the voucher discount is not applied and final price is adjusted correctly.
+     */
     @Test
     void testDiscountCalculation_WithoutVoucherCode() {
         // Act
@@ -86,6 +105,10 @@ class DiscountServiceIntegrationTest {
         assertFalse(result.getAppliedDiscounts().containsKey("Voucher - SUPER69"));
     }
 
+    /**
+     * Tests validation of a brand-specific discount code.
+     * Verifies that the discount code is correctly identified as valid.
+     */
     @Test
     void testValidateDiscountCode_BrandDiscount() {
         // Act
@@ -99,6 +122,10 @@ class DiscountServiceIntegrationTest {
         assertTrue(isValid);
     }
 
+    /**
+     * Tests validation of a category-specific discount code.
+     * Verifies that the discount code is correctly identified as valid.
+     */
     @Test
     void testValidateDiscountCode_CategoryDiscount() {
         // Act
