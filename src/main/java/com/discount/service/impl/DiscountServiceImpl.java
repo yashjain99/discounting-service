@@ -32,7 +32,7 @@ public class DiscountServiceImpl implements DiscountService {
     public DiscountedPrice calculateCartDiscounts(
             List<CartItem> cartItems,
             CustomerProfile customer,
-            Optional<PaymentInfo> paymentInfo
+            PaymentInfo paymentInfo
     ) throws DiscountCalculationException {
 
         try {
@@ -96,10 +96,8 @@ public class DiscountServiceImpl implements DiscountService {
             }
 
             // Check if any cart item matches discount criteria
-            boolean hasApplicableItem = cartItems.stream()
+            return cartItems.stream()
                     .anyMatch(item -> isDiscountApplicable(discount, item));
-
-            return hasApplicableItem;
 
         } catch (DiscountValidationException e) {
             throw e;
@@ -113,10 +111,10 @@ public class DiscountServiceImpl implements DiscountService {
 
     private void validateInputs(List<CartItem> cartItems, CustomerProfile customer) {
         if (cartItems == null || cartItems.isEmpty()) {
-            throw new DiscountCalculationException("Cart items cannot be empty");
+            throw new DiscountValidationException("Cart items cannot be empty");
         }
         if (customer == null) {
-            throw new DiscountCalculationException("Customer profile is required");
+            throw new DiscountValidationException("Customer profile is required");
         }
     }
 
@@ -194,15 +192,20 @@ public class DiscountServiceImpl implements DiscountService {
     }
 
     private BigDecimal applyBankOffers(
-            Optional<PaymentInfo> paymentInfo,
+            // Removed Optional as a parameter: it can cause issues with Jackson, JPA and it is discouraged.
+            PaymentInfo paymentInfo,
             BigDecimal currentPrice,
             Map<String, BigDecimal> appliedDiscounts
     ) {
-        if (paymentInfo.isEmpty() || paymentInfo.get().getBankName() == null) {
+
+        // Handle nullable paymentInfo
+        Optional<PaymentInfo> optionalPayment = Optional.ofNullable(paymentInfo);
+
+        if (optionalPayment.isEmpty() || optionalPayment.get().getBankName() == null) {
             return currentPrice;
         }
 
-        PaymentInfo payment = paymentInfo.get();
+        PaymentInfo payment = optionalPayment.get();
         Optional<Discount> bankOffer = discountRepository
                 .findBankOffer(payment.getBankName(), payment.getCardType());
 

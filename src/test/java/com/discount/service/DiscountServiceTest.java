@@ -70,7 +70,7 @@ class DiscountServiceTest {
         DiscountedPrice result = discountService.calculateCartDiscounts(
                 List.of(cartItem),
                 customer,
-                Optional.of(paymentInfo)
+                paymentInfo
         );
 
         // Assert
@@ -133,7 +133,7 @@ class DiscountServiceTest {
                 discountService.calculateCartDiscounts(
                         Collections.emptyList(),
                         customer,
-                        Optional.empty()
+                        null
                 )
         );
     }
