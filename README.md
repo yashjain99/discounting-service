@@ -17,13 +17,17 @@ and bank card offers.
 
 ```
 src/
-├── main/java/com/com.discount/
-│   ├── model/           # Domain models
-│   ├── service/         # Business logic
-│   ├── repository/      # Data access layer
-│   ├── exception/       # Custom exceptions
-│   └── config/          # Configuration classes
-└── test/                # Unit and integration tests
+├── main/java/com/discount/
+│   ├── controllers/     # REST controllers handling HTTP requests
+│   ├── dto/             # Data Transfer Objects for request and response payloads
+│   ├── model/           # Domain models representing entities and business objects
+│   ├── service/         # Business logic and service layer implementations
+│   ├── repository/      # Data access layer, including interfaces and in-memory/mock implementations
+│   ├── exception/       # Custom exceptions and global exception handling
+│   ├── utils/           # Utility and helper classes
+├── test/java/com/discount/
+│   ├── config/          # Test configuration and test data setup
+│   └── service/         # Unit and integration tests for service layer
 ```
 
 ## Technical Decisions
@@ -371,29 +375,3 @@ The test data includes a PUMA T-shirt (₹1000) with:
 2. **Test Coverage**: Unit tests use mocks, integration tests use real beans
     - Unit tests: Test service logic with mocked repository
     - Integration tests: Test complete Spring Boot context with test data
-
-## API Usage
-
-### Calculate Cart Discounts
-
-```java
-List<CartItem> cartItems = createCartItems();
-CustomerProfile customer = createCustomer();
-Optional<PaymentInfo> payment = Optional.of(createPaymentInfo());
-
-DiscountedPrice result = discountService.calculateCartDiscounts(
-        cartItems,
-        customer,
-        payment
-);
-```
-
-### Validate Discount Code
-
-```java
-boolean isValid = discountService.validateDiscountCode(
-        "PUMA40",
-        cartItems,
-        customer
-);
-```
