@@ -33,7 +33,8 @@ public class DiscountServiceImpl implements DiscountService {
     public DiscountedPrice calculateCartDiscounts(
             List<CartItem> cartItems,
             CustomerProfile customer,
-            PaymentInfo paymentInfo
+            PaymentInfo paymentInfo,
+            String voucherCode
     ) throws DiscountCalculationException {
 
         try {
@@ -49,7 +50,7 @@ public class DiscountServiceImpl implements DiscountService {
 
             // Step 2: Apply voucher codes
             BigDecimal priceAfterVoucher = applyVoucherDiscounts(
-                    cartItems, customer, priceAfterBrandCategory, appliedDiscounts
+                    voucherCode, cartItems, customer, priceAfterBrandCategory, appliedDiscounts
             );
 
             // Step 3: Apply bank offers
@@ -82,6 +83,9 @@ public class DiscountServiceImpl implements DiscountService {
     ) throws DiscountValidationException {
 
         try {
+
+            System.err.println(code);
+
             Discount discount = discountRepository.findByCode(code)
                     .orElseThrow(() -> new DiscountValidationException(
                             "Discount code not found: " + code
@@ -204,15 +208,49 @@ public class DiscountServiceImpl implements DiscountService {
         return new DiscountCalculationResult(newPrice, discountAmount);
     }
 
+    /**
+     * Apply voucher discount if code is provided and valid
+     */
     private BigDecimal applyVoucherDiscounts(
+            String code,
             List<CartItem> cartItems,
             CustomerProfile customer,
             BigDecimal currentPrice,
             Map<String, BigDecimal> appliedDiscounts
     ) {
-        // For this implementation, vouchers would be passed separately
-        // This is a placeholder for voucher logic
-        return currentPrice;
+        if (code == null || code.isBlank()) {
+            return currentPrice;
+        }
+
+        // Validate the voucher code
+        if (!validateDiscountCode(code, cartItems, customer)) {
+            log.warn("Invalid voucher code: {}", code);
+            throw new DiscountValidationException("Invalid or inapplicable voucher code: " + code);
+        }
+
+        // Get voucher discount details
+        Optional<Discount> voucher = discountRepository.findByCode(code);
+        if (voucher.isEmpty()) {
+            return currentPrice;
+        }
+
+        Discount voucherDiscount = voucher.get();
+
+        // Check if voucher is applicable to cart items
+        boolean applicable = cartItems.stream()
+                .anyMatch(item -> new ValidationUtils().isDiscountApplicable(voucherDiscount, item));
+
+        if (!applicable) {
+            throw new DiscountValidationException(
+                    "Voucher code '" + code + "' is not applicable to items in cart"
+            );
+        }
+
+        // Calculate voucher discount
+        BigDecimal discountAmount = calculateDiscount(currentPrice, voucherDiscount);
+        appliedDiscounts.put("Voucher - " + code, discountAmount);
+
+        return currentPrice.subtract(discountAmount);
     }
 
     private BigDecimal applyBankOffers(

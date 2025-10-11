@@ -25,13 +25,15 @@ public interface DiscountService {
      * @param cartItems   List of items in the cart
      * @param customer    Customer profile information
      * @param paymentInfo Optional payment information
+     * @param voucherCode Optional voucher code information
      * @return Calculated discounted price details
      * @throws DiscountCalculationException if calculation fails
      */
     DiscountedPrice calculateCartDiscounts(
             List<CartItem> cartItems,
             CustomerProfile customer,
-            PaymentInfo paymentInfo
+            PaymentInfo paymentInfo,
+            String voucherCode
     ) throws DiscountCalculationException;
 
     /**

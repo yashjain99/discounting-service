@@ -33,7 +33,8 @@ class DiscountServiceIntegrationTest {
         DiscountedPrice result = discountService.calculateCartDiscounts(
                 testData.getCartItems(),
                 testData.getCustomer(),
-                testData.getPaymentInfo()
+                testData.getPaymentInfo(),
+                testData.getVoucherCode()
         );
 
         // Assert
@@ -43,9 +44,10 @@ class DiscountServiceIntegrationTest {
         assertTrue(result.getAppliedDiscounts().containsKey("Brand Discount"));
         assertTrue(result.getAppliedDiscounts().containsKey("Category Discount"));
         assertTrue(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+        assertTrue(result.getAppliedDiscounts().containsKey("Voucher - SUPER69"));
 
-        // Expected: 1000 -> 600 (40% off) -> 540 (10% off) -> 486 (10% off)
-        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(486.00)));
+        // Expected: 1000 -> 600 (40% off) -> 540 (10% off) -> 486 (10% off) -> 150.66 (69% off)
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(150.66)));
 
         // Verify discount message is generated
         assertNotNull(result.getMessage());
@@ -58,13 +60,30 @@ class DiscountServiceIntegrationTest {
         DiscountedPrice result = discountService.calculateCartDiscounts(
                 testData.getCartItems(),
                 testData.getCustomer(),
+                null,
+                testData.getVoucherCode()
+        );
+
+        // Assert
+        // Expected: 1000 -> 600 (40% off) -> 540 (10% off) -> 167 (69% off)
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(167.40)));
+        assertFalse(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+    }
+
+    @Test
+    void testDiscountCalculation_WithoutVoucherCode() {
+        // Act
+        DiscountedPrice result = discountService.calculateCartDiscounts(
+                testData.getCartItems(),
+                testData.getCustomer(),
+                testData.getPaymentInfo(),
                 null
         );
 
         // Assert
         // Expected: 1000 -> 600 (40% off) -> 540 (10% off)
-        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(540.00)));
-        assertFalse(result.getAppliedDiscounts().containsKey("Bank Offer - ICICI"));
+        assertEquals(0, result.getFinalPrice().compareTo(BigDecimal.valueOf(486.00)));
+        assertFalse(result.getAppliedDiscounts().containsKey("Voucher - SUPER69"));
     }
 
     @Test

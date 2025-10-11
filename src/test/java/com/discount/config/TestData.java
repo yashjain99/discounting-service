@@ -14,4 +14,5 @@ public class TestData {
     private List<CartItem> cartItems;
     private CustomerProfile customer;
     private PaymentInfo paymentInfo;
+    private String voucherCode;
 }

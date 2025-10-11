@@ -70,7 +70,8 @@ class DiscountServiceTest {
         DiscountedPrice result = discountService.calculateCartDiscounts(
                 List.of(cartItem),
                 customer,
-                paymentInfo
+                paymentInfo,
+                "SUPER69"
         );
 
         // Assert
@@ -133,6 +134,7 @@ class DiscountServiceTest {
                 discountService.calculateCartDiscounts(
                         Collections.emptyList(),
                         customer,
+                        null,
                         null
                 )
         );
@@ -170,11 +172,21 @@ class DiscountServiceTest {
                 .isPercentage(true)
                 .build();
 
+        Discount voucherDiscount = Discount.builder()
+                .id("VOUCHER_SUPER69")
+                .code("SUPER69")
+                .type(DiscountType.VOUCHER)
+                .value(BigDecimal.valueOf(69))
+                .isPercentage(true)
+                .build();
+
         when(discountRepository.findBrandDiscount("PUMA"))
                 .thenReturn(Optional.of(brandDiscount));
         when(discountRepository.findCategoryDiscount("T-Shirts"))
                 .thenReturn(Optional.of(categoryDiscount));
         when(discountRepository.findBankOffer("ICICI", "CREDIT"))
                 .thenReturn(Optional.of(bankOffer));
+        when(discountRepository.findByCode("SUPER69"))
+                .thenReturn((Optional.of(voucherDiscount)));
     }
 }

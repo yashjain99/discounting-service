@@ -46,6 +46,7 @@ public class TestDataConfig {
                 .cartItems(List.of(cartItem))
                 .customer(customer)
                 .paymentInfo(paymentInfo)
+                .voucherCode("SUPER69")
                 .build();
     }
 }
