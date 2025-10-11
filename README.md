@@ -73,10 +73,21 @@ mvn clean install
 mvn test
 ```
 
-### Run Application
+### Run Application Locally
 
 ```bash
 mvn spring-boot:run
+```
+
+### Run Application via Docker
+
+- Build the docker Image:
+```bash
+docker build -t discount-service .
+```
+- Run the container
+```bash
+docker run -p 8080:8080 discount-service
 ```
 
 The application will start on `http://localhost:8080`
