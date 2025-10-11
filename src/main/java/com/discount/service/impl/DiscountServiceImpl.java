@@ -81,11 +81,7 @@ public class DiscountServiceImpl implements DiscountService {
             List<CartItem> cartItems,
             CustomerProfile customer
     ) throws DiscountValidationException {
-
         try {
-
-            System.err.println(code);
-
             Discount discount = discountRepository.findByCode(code)
                     .orElseThrow(() -> new DiscountValidationException(
                             "Discount code not found: " + code
